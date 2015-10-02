@@ -22,6 +22,7 @@ namespace StreamCoder
         private Mutex _mutex;
         FileStream _fileStream;
         private Process _process;
+        private readonly TargetFormats _format;
 
         private bool TranscodingComplete
         {
@@ -34,7 +35,7 @@ namespace StreamCoder
 
         public override bool CanSeek
         {
-            get { return true; } //can only seek up to the end of the current file size, seeking past the end it waits for the file to catch up or end
+            get { return TranscodingComplete; } //can only seek up to the end of the current file size, seeking past the end it waits for the file to catch up or end
         }
 
         public override bool CanWrite
@@ -46,7 +47,16 @@ namespace StreamCoder
         {
             get
             {
-                return -1;
+                if (TranscodingComplete)
+                {
+
+                    return RealLength;
+                }
+                else
+                {
+                    return -1;
+                }
+
             }
         }
         private long RealLength
@@ -136,7 +146,7 @@ namespace StreamCoder
             _sourceFile = Path.GetFullPath(file);
             _transcodedFile = _sourceFile + "." + format.ToString().ToLower();
             _tempFile = _transcodedFile + ".tran";
-
+            _format = format;
 
 
             _mutex = new Mutex(false, CalculateMD5Hash("394BCAFD-2284-4829-B105-AE310552BDCE # " + _sourceFile));
@@ -181,22 +191,24 @@ namespace StreamCoder
 
         protected override void Dispose(bool disposing)
         {
-            _mutex.WaitOne();
-
-            if (_process != null)
+            if (_mutex != null)
             {
-                _process.Kill();
-                File.Delete(_transcodedFile);
-                File.Delete(_tempFile);
-            }
-            //can kill transcoder
-            this._thread?.Join();
-            _fileStream.Dispose();
-            _mutex.ReleaseMutex();
-            _mutex.Close();
-            _mutex = null;
-        }
+                _mutex.WaitOne();
 
+                if (_process != null)
+                {
+                    _process.Kill();
+                    File.Delete(_transcodedFile);
+                    File.Delete(_tempFile);
+                }
+                //can kill transcoder
+                this._thread?.Join();
+                _fileStream.Dispose();
+                _mutex.ReleaseMutex();
+                _mutex.Close();
+                _mutex = null;
+            }
+        }
 
 
         public void Worker()
@@ -206,11 +218,11 @@ namespace StreamCoder
             //transcode now complete
             if (!File.Exists(_transcodedFile))
             {
-                _process = Process.Start(new ProcessStartInfo("ffmpeg.exe", " -i \"" + _sourceFile + "\" -s 800x450 -movflags +faststart \"" + _transcodedFile + "\"")
+                _process = Process.Start(new ProcessStartInfo("ffmpeg.exe", " -i \"" + _sourceFile + "\" -s 800x450 -movflags faststart \"" + _transcodedFile + "\"")
                 {
                     CreateNoWindow = true,
                     UseShellExecute = false,
-                   // RedirectStandardOutput = true,
+                    // RedirectStandardOutput = true,
                     //RedirectStandardError= true
                 });
 
